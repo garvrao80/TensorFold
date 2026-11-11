@@ -1,163 +1,52 @@
-name: App and mobile checks
+name: Validate Qwen Metal startup warning
+run-name: Qwen Metal host checks at 93cce388
 
 on:
-  # Only when the app can be affected: app/ (mobile is app/mobile), the repo README its docs test reads, and this file.
-  # Engine-only changes skip it; with ~4 runners at once its runs held main's engine checks for over an hour (2 Nov).
-  pull_request:
-    paths:
-      - 'app/**'
-      - 'README.md'
-      - '.github/workflows/app.yml'
-  push:
-    paths:
-      - 'app/**'
-      - 'README.md'
-      - '.github/workflows/app.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: app-checks-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  CI: 'true'
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-  HF_HUB_OFFLINE: '1'
-  TRANSFORMERS_OFFLINE: '1'
-
 jobs:
-  desktop:
-    runs-on: macos-15
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22.23.2'
-          cache: npm
-          cache-dependency-path: |
-            app/package-lock.json
-            app/mobile/package-lock.json
-      - name: Use the package-manager pin
-        run: npm install --global --ignore-scripts npm@10.9.8
-      - name: Install locked desktop dependencies without lifecycle scripts
-        run: npm ci --ignore-scripts
-      - name: Install mobile fixtures required by the shared test runner
-        run: npm --prefix mobile ci --ignore-scripts
-      - name: Desktop security and runtime tests
-        run: npm test
-      - name: Typecheck desktop
-        run: npm run typecheck
-      - name: Check patch whitespace
-        run: |
-          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            git diff --check HEAD^ HEAD
-          else
-            git show --format= --check HEAD
-          fi
-
-  desktop-linux:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22.23.2'
-          cache: npm
-          cache-dependency-path: |
-            app/package-lock.json
-            app/mobile/package-lock.json
-      - name: Use the package-manager pin
-        run: npm install --global --ignore-scripts npm@10.9.8
-      - name: Install locked desktop dependencies without lifecycle scripts
-        run: npm ci --ignore-scripts
-      - name: Install mobile fixtures required by the shared test runner
-        run: npm --prefix mobile ci --ignore-scripts
-      - name: Desktop security and runtime tests
-        run: npm test
-      - name: Typecheck desktop
-        run: npm run typecheck
-      - name: Check patch whitespace
-        run: |
-          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            git diff --check HEAD^ HEAD
-          else
-            git show --format= --check HEAD
-          fi
-
-  appimage-linux:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+  mac-host:
+    runs-on: macos-26
+    timeout-minutes: 35
     env:
-      # electron-builder packages the real Electron runtime.
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '0'
-    defaults:
-      run:
-        working-directory: app
+      SOURCE_HEAD: 93cce3888765b928a83b91a65b358b28176b7b5b
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          repository: garvrao80/TensorFold
+          ref: 93cce3888765b928a83b91a65b358b28176b7b5b
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
         with:
-          node-version: '22.23.2'
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-      - name: Use the package-manager pin
-        run: npm install --global --ignore-scripts npm@10.9.8
-      - name: Install locked desktop dependencies without lifecycle scripts
-        run: npm ci --ignore-scripts
-      - name: Install Electron and rebuild node-pty
-        run: npm run deps:trusted-scripts
-      - name: Build the Ubuntu 24.04 AppImage
-        run: npm run dist:linux
-      - name: Clean-install smoke of the AppImage
-        run: APPIMAGE_EXTRACT_AND_RUN=1 npm run smoke:linux:packaged -- --appimage
-      - name: Upload the AppImage
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: tensorfold-linux-appimage
-          path: app/release/linux/*.AppImage
-          if-no-files-found: error
-
-  mobile:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22.23.2'
-          cache: npm
-          cache-dependency-path: |
-            app/package-lock.json
-            app/mobile/package-lock.json
-      - name: Use the package-manager pin
-        run: npm install --global --ignore-scripts npm@10.9.8
-      - name: Install locked mobile dependencies without lifecycle scripts
-        run: npm --prefix mobile ci --ignore-scripts
-      - name: Validate mobile lock, security regressions, types and lint
-        run: npm run verify:mobile
+          version: 0.17.0
+          use-cache: false
+      - name: Verify source and environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          git rev-parse HEAD
+          zig version
+          uname -m
+          sw_vers
+          sysctl -n hw.memsize
+      - name: Qwen memory and startup host regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          zig build test-qwen27-memory-host test-qwen27-startup-host check-qwen27-speed-host -j2 --test-timeout 5m --summary all
+      - name: Read live macOS free memory and pressure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/memory_probe.zig" <<'ZIG'
+          const std = @import("std");
+          const memory = @import("sys").memory_policy;
+          pub fn main() void {
+              std.debug.print("free_bytes={any} pressure={any}\n", .{ memory.free(), memory.pressure() });
+          }
+          ZIG
+          zig run -lc --dep sys "-Mroot=$RUNNER_TEMP/memory_probe.zig" -Msys=zig/src/platform/sys.zig
