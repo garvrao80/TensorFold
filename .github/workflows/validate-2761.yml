@@ -1,0 +1,53 @@
+name: Validate Qwen Metal startup warning
+
+on:
+  push:
+    branches:
+      - validation/2761-metal-host-93cce388
+
+permissions:
+  contents: read
+
+jobs:
+  mac-host:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      SOURCE_HEAD: 93cce3888765b928a83b91a65b358b28176b7b5b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: garvrao80/TensorFold
+          ref: 93cce3888765b928a83b91a65b358b28176b7b5b
+          persist-credentials: false
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.17.0
+          use-cache: false
+      - name: Verify source and environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_HEAD"
+          git rev-parse HEAD
+          zig version
+          uname -m
+          sw_vers
+          sysctl -n hw.memsize
+      - name: Qwen memory and startup host regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          zig build test-qwen27-memory-host test-qwen27-startup-host check-qwen27-speed-host -j2 --test-timeout 5m --summary all
+      - name: Read live macOS free memory and pressure
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/memory_probe.zig" <<'ZIG'
+          const std = @import("std");
+          const memory = @import("sys").memory_policy;
+          pub fn main() void {
+              std.debug.print("free_bytes={any} pressure={any}\n", .{ memory.free(), memory.pressure() });
+          }
+          ZIG
+          zig run -lc --dep sys "-Mroot=$RUNNER_TEMP/memory_probe.zig" -Msys=zig/src/platform/sys.zig
