@@ -1,4 +1,5 @@
 name: Validate Qwen Metal startup warning
+run-name: Qwen Metal host checks at 93cce388
 
 on:
   push:
